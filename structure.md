@@ -84,3 +84,65 @@ a. Data Flow
 SmartWeave: Stores critical state (listings, ownership, auction data).
 ao: Processes events and triggers actions based on that state.
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+resolveDomain: Domain resolution
+setDomainRecord: Set DNS records
+createSubdomain: Create subdomain
+registerTLD: Register TLD
+
+
+
+
+
+DomainRecord: DNS record interface
+ResolutionResult: Resolution result interface
+Subdomain: Subdomain interface
+TLD: TLD interface
+
+
+
+
+
+
+
+validateRecord: Validate DNS record
+parseDomain: Parse domain parts
+isValidTLD: Validate TLD
+resolveRecords: Resolve domain records
+
+
+
+
+
+
+cancel_auction: Cancel auction
+extend_auction: Extend auction time
+get_auction_history: Get auction history
+validate_auction_params: Validate auction parameters
+
+
+
+
+
+
+
+
+
+refund_escrow: Refund escrow
+get_escrow_history: Get escrow history
+validate_escrow_params: Validate escrow parameters
+get_active_escrows: Get active escrows

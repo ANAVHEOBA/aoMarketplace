@@ -1,5 +1,5 @@
 // src/contracts/domain/domain.utils.ts
-import { DomainState, Transaction } from './domain.types';
+import { DomainState, Transaction, DomainRecord } from './domain.types';
 
 export const REGISTRATION_FEE = 0.1;
 
@@ -77,4 +77,62 @@ export function createTransaction(
     timestamp: Date.now(),
     status: 'SUCCESS'
   };
+}
+
+export function validateRecord(record: DomainRecord): boolean {
+  if (!record.type || !record.value || !record.ttl || !record.timestamp) {
+    return false;
+  }
+
+  switch (record.type) {
+    case 'A':
+      return /^(\d{1,3}\.){3}\d{1,3}$/.test(record.value);
+    case 'CNAME':
+      return /^[a-z0-9-]+(\.[a-z0-9-]+)*$/.test(record.value);
+    case 'TXT':
+      return record.value.length <= 255;
+    case 'MX':
+      return /^\d+\s+[a-z0-9-]+(\.[a-z0-9-]+)*$/.test(record.value);
+    case 'NS':
+      return /^[a-z0-9-]+(\.[a-z0-9-]+)*$/.test(record.value);
+    default:
+      return false;
+  }
+}
+
+export function parseDomain(domain: string): { tld: string; name: string; subdomain?: string } {
+  const parts = domain.split('.');
+  if (parts.length < 2) {
+    throw new Error('Invalid domain format');
+  }
+
+  const tld = parts[parts.length - 1];
+  const name = parts[parts.length - 2];
+  const subdomain = parts.length > 2 ? parts.slice(0, -2).join('.') : undefined;
+
+  return { tld, name, subdomain };
+}
+
+export function isValidTLD(tld: string): boolean {
+  return /^[a-z]{2,}$/.test(tld);
+}
+
+export function resolveRecords(
+  state: DomainState,
+  domain: string
+): DomainRecord[] {
+  const records = state.records[domain] || [];
+  const now = Date.now();
+
+  return records.filter(record => {
+    if (!validateRecord(record)) {
+      return false;
+    }
+
+    if (record.ttl === 0) {
+      return true;
+    }
+
+    return now - record.timestamp < record.ttl * 1000;
+  });
 }

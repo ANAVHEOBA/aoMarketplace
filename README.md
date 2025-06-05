@@ -42,6 +42,8 @@ src/
   - Registration and ownership tracking
   - Domain listing and delisting
   - Ownership verification and transfer
+  - ANS (Arweave Name System) integration
+  - Visual domain explorer interface
 
 - **Auction System**
   - Time-based auctions
@@ -54,6 +56,14 @@ src/
   - Multi-step settlement process
   - Transaction verification
   - State management
+
+- **ANS Explorer**
+  - Visual domain name search
+  - Domain ownership history
+  - Transaction history visualization
+  - Real-time domain status updates
+  - Domain metadata display
+  - Interactive domain management interface
 
 ### Planned Features
 - **Real-time Notifications**

@@ -1,5 +1,5 @@
 // src/contracts/domain/domain.contract.ts
-import { DomainState, ContractAction, Purchase, VerificationRecord, Transaction } from './domain.types';
+import { DomainState, ContractAction, Purchase, VerificationRecord, Transaction, DomainRecord, ResolutionResult, Subdomain, TLD } from './domain.types';
 import { 
   isDomainAvailable, 
   validateDomainName, 
@@ -10,7 +10,11 @@ import {
   verifyOwnership,
   canTransferOwnership,
   createTransaction,
-  isSelfPurchase
+  isSelfPurchase,
+  validateRecord,
+  parseDomain,
+  isValidTLD,
+  resolveRecords
 } from './domain.utils';
 
 export function handle(state: DomainState, action: ContractAction): DomainState {
@@ -34,6 +38,21 @@ export function handle(state: DomainState, action: ContractAction): DomainState 
       return transferDomainOwnership(state, input.domainName!, input.newOwner, caller);
     case 'buy':
       return buyDomain(state, input.domainName!, caller, value);
+    case 'resolve':
+      const resolution = resolveDomain(state, input.domain!);
+      return {
+        ...state,
+        resolutionResults: {
+          ...state.resolutionResults,
+          [input.domain!]: resolution
+        }
+      };
+    case 'setRecord':
+      return setDomainRecord(state, input.domain!, input.record!, caller);
+    case 'createSubdomain':
+      return createSubdomain(state, input.parent!, input.subdomain!, input.owner!, caller);
+    case 'registerTLD':
+      return registerTLD(state, input.tld!, input.owner!, caller, value);
     default:
       throw new Error('Invalid function');
   }
@@ -238,7 +257,6 @@ function transferDomainOwnership(
   };
 }
 
-
 function buyDomain(
   state: DomainState,
   domainName: string,
@@ -288,6 +306,145 @@ function buyDomain(
       [domainName]: purchase
     },
     listings: remainingListings,
+    transactions: {
+      ...state.transactions,
+      [transaction.id]: transaction
+    }
+  };
+}
+
+function resolveDomain(
+  state: DomainState,
+  domain: string
+): ResolutionResult {
+  const { tld, name, subdomain } = parseDomain(domain);
+  
+  if (!state.tlds[tld]) {
+    throw new Error('Invalid TLD');
+  }
+
+  const fullDomain = subdomain ? `${subdomain}.${name}.${tld}` : `${name}.${tld}`;
+  const owner = state.ownership[fullDomain];
+  
+  if (!owner) {
+    throw new Error('Domain not found');
+  }
+
+  const records = resolveRecords(state, fullDomain);
+  const subdomains = Object.keys(state.subdomains)
+    .filter(sub => sub.endsWith(`.${fullDomain}`));
+
+  return {
+    records,
+    owner,
+    expiry: state.registrations[fullDomain]?.timestamp + 365 * 24 * 60 * 60 * 1000,
+    subdomains
+  };
+}
+
+function setDomainRecord(
+  state: DomainState,
+  domain: string,
+  record: DomainRecord,
+  caller: string
+): DomainState {
+  if (!verifyOwnership(state, domain, caller)) {
+    throw new Error('Not the owner of this domain');
+  }
+
+  if (!validateRecord(record)) {
+    throw new Error('Invalid record format');
+  }
+
+  const transaction = createTransaction('RECORD_UPDATE', domain, caller);
+
+  return {
+    ...state,
+    records: {
+      ...state.records,
+      [domain]: [...(state.records[domain] || []), record]
+    },
+    transactions: {
+      ...state.transactions,
+      [transaction.id]: transaction
+    }
+  };
+}
+
+function createSubdomain(
+  state: DomainState,
+  parent: string,
+  subdomain: string,
+  owner: string,
+  caller: string
+): DomainState {
+  if (!verifyOwnership(state, parent, caller)) {
+    throw new Error('Not the owner of the parent domain');
+  }
+
+  const fullSubdomain = `${subdomain}.${parent}`;
+  
+  if (state.ownership[fullSubdomain]) {
+    throw new Error('Subdomain already exists');
+  }
+
+  const transaction = createTransaction('SUBDOMAIN_CREATION', fullSubdomain, caller, owner);
+
+  return {
+    ...state,
+    ownership: {
+      ...state.ownership,
+      [fullSubdomain]: owner
+    },
+    subdomains: {
+      ...state.subdomains,
+      [fullSubdomain]: {
+        name: subdomain,
+        owner,
+        records: [],
+        parent
+      }
+    },
+    transactions: {
+      ...state.transactions,
+      [transaction.id]: transaction
+    }
+  };
+}
+
+function registerTLD(
+  state: DomainState,
+  tld: string,
+  owner: string,
+  caller: string,
+  value: number
+): DomainState {
+  if (!isValidTLD(tld)) {
+    throw new Error('Invalid TLD format');
+  }
+
+  if (state.tlds[tld]) {
+    throw new Error('TLD already registered');
+  }
+
+  if (!hasEnoughFunds(value, REGISTRATION_FEE * 10)) {
+    throw new Error('Insufficient funds for TLD registration');
+  }
+
+  const transaction = createTransaction('TLD_REGISTRATION', tld, caller, owner);
+
+  return {
+    ...state,
+    tlds: {
+      ...state.tlds,
+      [tld]: {
+        name: tld,
+        owner,
+        registrar: caller,
+        price: REGISTRATION_FEE * 10,
+        expiry: Date.now() + 365 * 24 * 60 * 60 * 1000
+      }
+    },
     transactions: {
       ...state.transactions,
       [transaction.id]: transaction
